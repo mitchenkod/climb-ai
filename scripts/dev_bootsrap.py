@@ -54,6 +54,8 @@ def generate_fake_holds(surface, n=15):
         surface.holds.append(hold)
         holds.append(hold)
 
+    for hold in holds:
+        print(f"{hold.x}, {hold.y}")
     return holds
 
 
@@ -87,14 +89,12 @@ def main():
     # 5. Generate route
     route = generate_route(gym.all_holds())
 
-    print(f"Route holds: {len(route)}")
-
     # 6. Image
     image_path = ensure_sample_image()
 
     # 7. Overlay
     output_path = "data/samples/output_route.jpg"
-    draw_route(image_path, route, output_path)
+    draw_route(image_path, gym, route, output_path)
 
     print(f"\n✅ Overlay saved to: {output_path}\n")
     print("🎉 DEV pipeline completed successfully!\n")

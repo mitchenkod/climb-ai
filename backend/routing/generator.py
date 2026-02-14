@@ -1,3 +1,6 @@
+from backend.models.route import Route
+from backend.models.hold_in_route import HoldInRoute
+
 def generate_route(holds):
     """
     Генерация простого маршрута:
@@ -7,6 +10,7 @@ def generate_route(holds):
     """
     if not holds:
         return []
+    route = Route()
 
     # сортируем по y (от нижней к верхней)
     holds_sorted = sorted(holds, key=lambda h: h.y, reverse=False)
@@ -14,18 +18,15 @@ def generate_route(holds):
     # стартовые
     start_holds = holds_sorted[:4]
     for h in start_holds:
-        h.role = 'start'
+        HoldInRoute(route=route, hold=h, role='start')
 
     # топ/финиш
     finish_hold = holds_sorted[-1]
-    finish_hold.role = 'finish'
-
+    HoldInRoute(route=route, hold=finish_hold, role='finish')
+ 
     # остальные
     for h in holds_sorted[4:-1]:
-        h.role = 'intermediate'
-
-    # простой маршрут — отсортированные по высоте
-    route = start_holds + holds_sorted[4:-1] + [finish_hold]
+        HoldInRoute(route=route, hold=finish_hold, role='intermediate')
     return route
 
 __all__ = ["generate_route"]
