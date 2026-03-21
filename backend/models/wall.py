@@ -3,8 +3,6 @@ from sqlmodel import Field, Relationship
 from .base import BaseTable
 
 class Wall(BaseTable, table=True):
-    name: str
-
     gym_id: Optional[int] = Field(default=None, foreign_key="gym.id")
 
     gym: Optional["Gym"] = Relationship(back_populates="walls")
@@ -14,7 +12,7 @@ class Wall(BaseTable, table=True):
         self.surfaces.append(surface)
 
     def all_holds(self):
-        """Возвращает список всех зацепок со всех плоскостей"""
+        """Возвращает все зацепки со всех поверхностей стены"""
         holds = []
         for surface in self.surfaces:
             holds.extend(surface.holds)

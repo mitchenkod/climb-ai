@@ -13,7 +13,7 @@ def generate_route(holds):
     route = Route()
 
     # сортируем по y (от нижней к верхней)
-    holds_sorted = sorted(holds, key=lambda h: h.y, reverse=False)
+    holds_sorted = sorted(holds, key=lambda h: h.y, reverse=True)
 
     # стартовые
     start_holds = holds_sorted[:4]
@@ -26,7 +26,8 @@ def generate_route(holds):
  
     # остальные
     for h in holds_sorted[4:-1]:
-        HoldInRoute(route=route, hold=finish_hold, role='intermediate')
+        HoldInRoute(route=route, hold=h, role='intermediate')
+   
     return route
 
 __all__ = ["generate_route"]
