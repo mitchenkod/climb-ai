@@ -1,12 +1,16 @@
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship
 from .base import BaseTable
+
+if TYPE_CHECKING:
+    from .wall import Wall
 
 class Gym(BaseTable, table=True):
     name: str
     city: Optional[str] = None
 
-    walls: List["Wall"] = Relationship(back_populates="gym")
+    walls: Mapped[List["Wall"]] = Relationship(back_populates="gym")
 
     def all_holds(self):
         """

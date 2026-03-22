@@ -1,5 +1,10 @@
 import sys
 import traceback
+from pathlib import Path
+
+# Добавить корень проекта в sys.path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 
 if __name__ == "__main__":
     try:

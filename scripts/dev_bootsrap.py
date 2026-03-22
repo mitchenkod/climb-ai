@@ -14,13 +14,15 @@ from backend.models.gym import Gym
 from backend.models.wall import Wall
 from backend.models.surface import Surface
 from backend.models.hold import Hold
-from backend.models.graph import GraphNode, GraphEdge, GraphNodeHold
+from backend.models.graph import Movement, BodyPosition, MovementHold
+from backend.models.route import Route
+from backend.models.movement_graph import MovementGraph
 from backend.models.hold_in_route import HoldInRoute
 from backend.db.database import get_session
 from sqlmodel import select
 
 # routing
-from backend.routing.generator import generate_route
+from backend.services.climbing.route_builder import build_route_for_surface
 
 # visualization
 from backend.visualization.overlay import draw_route, draw_graph
@@ -29,7 +31,7 @@ from backend.visualization.overlay import draw_route, draw_graph
 from backend.db.database import init_db
 
 # graph building
-from backend.services.climbing.graph_builder import build_graph
+from backend.services.climbing.graph_builder import create_movement_graph
 
 
 # -----------------------
@@ -64,6 +66,7 @@ def generate_fake_holds(surface, n=15):
             x=x,
             y=y,
             z=z,
+            hold_type="crimp",  # Добавляем обязательный hold_type
             surface=surface,
         )
         surface.holds.append(hold)
@@ -79,23 +82,42 @@ def cleanup_test_data(session):
     try:
         print("🧹 Cleaning up test data...\n")
         
-        # Удаляем рёбра графа
-        edges = session.exec(select(GraphEdge)).all()
+        # Удаляем переходы BodyPosition
+        edges = session.exec(select(BodyPosition)).all()
         for edge in edges:
             session.delete(edge)
-        print(f"  Deleted {len(edges)} graph edges")
+        print(f"  Deleted {len(edges)} body positions")
         
-        # Удаляем связи между вершинами и зацепками
-        node_holds = session.exec(select(GraphNodeHold)).all()
-        for nh in node_holds:
-            session.delete(nh)
-        print(f"  Deleted {len(node_holds)} graph node-hold associations")
+        # Удаляем связи между движениями и зацепками
+        movement_holds = session.exec(select(MovementHold)).all()
+        for mh in movement_holds:
+            session.delete(mh)
+        print(f"  Deleted {len(movement_holds)} movement-hold associations")
         
-        # Удаляем вершины графа
-        nodes = session.exec(select(GraphNode)).all()
+        # Удаляем движения
+        nodes = session.exec(select(Movement)).all()
         for node in nodes:
             session.delete(node)
-        print(f"  Deleted {len(nodes)} graph nodes")
+        print(f"  Deleted {len(nodes)} movements")
+        
+        # Удаляем движения
+        nodes = session.exec(select(BodyPosition)).all()
+        for node in nodes:
+            session.delete(node)
+        print(f"  Deleted {len(nodes)} body positions")
+
+
+        # Удаляем маршруты
+        routes = session.exec(select(Route)).all()
+        for r in routes:
+            session.delete(r)
+        print(f"  Deleted {len(routes)} routes")
+        
+        # Удаляем графы движений
+        movement_graphs = session.exec(select(MovementGraph)).all()
+        for mg in movement_graphs:
+            session.delete(mg)
+        print(f"  Deleted {len(movement_graphs)} movement graphs")
         
         # Удаляем зацепки
         holds = session.exec(select(Hold)).all()
@@ -156,7 +178,8 @@ def main():
         print(f"Generated holds: {len(holds)}")
 
         # 5. Generate route
-        route = generate_route(holds)
+        result = build_route_for_surface(surface, session=session)
+        route = result["route"]
 
         # 6. Image
         image_path = ensure_sample_image()
@@ -167,7 +190,7 @@ def main():
         print(f"\n✅ Route overlay saved to: {output_route_path}\n")
 
         # 8. Build and visualize movement graph
-        graph, graph_nodes, hold_map = build_graph(holds, max_contacts=4, distance_threshold=0.1)
+        graph, graph_nodes, hold_map = create_movement_graph(holds, max_contacts=4, distance_threshold=0.3)
         output_graph_path = "data/samples/output_graph.jpg"
         draw_graph(image_path, graph_nodes, hold_map, output_graph_path)
         print(f"✅ Graph overlay saved to: {output_graph_path}\n")

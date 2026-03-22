@@ -1,4 +1,4 @@
-const imageName = "output_graph.jpg";
+const imageName = "wall.jpg";
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
@@ -18,7 +18,7 @@ function getWall() {
       .then(data => {
         // 3. Получаем и используем данные
         console.log(data.holds);
-        data.holds.forEach( hold => {drawPoint(hold.x, hold.y)} )
+        data.holds.forEach( hold => {drawPoint(hold.x * img.width, hold.y *  img.height)} )
       })
 }
 
@@ -49,6 +49,13 @@ function drawPoint(x, y) {
     ctx.fill();
 }
 
+function drawCircle(x, y) {
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, 2 * Math.PI);
+     ctx.fillStyle = "green";
+    ctx.fill();
+}
+
 function saveAnnotations() {
     fetch("/api/walls/1/holds", {
         method: "POST",
@@ -58,5 +65,22 @@ function saveAnnotations() {
         })
     })
     .then(response => response.json())
+    .then(data => alert("Saved!"));
+}
+
+function generateRoute() {
+    fetch("/api/routes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            holds: holds
+        })
+    })
+    .then(response => response.json())
+          .then(data => {
+        // 3. Получаем и используем данные
+        console.log(data.holds);
+        data.start_holds.forEach( hold => {drawCircle(hold.x * img.width, hold.y *  img.height)} )
+      })
     .then(data => alert("Saved!"));
 }

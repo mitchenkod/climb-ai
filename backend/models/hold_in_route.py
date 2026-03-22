@@ -1,7 +1,12 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship
 from .base import BaseTable
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .route import Route
+    from .hold import Hold
 
 class HoldRole(str, Enum):
     START = "start"
@@ -24,5 +29,5 @@ class HoldInRoute(BaseTable, table=True):
 
     beta_hint: Optional[str] = None
 
-    route: Optional["Route"] = Relationship(back_populates="holds_in_route")
-    hold: Optional["Hold"] = Relationship(back_populates="routes")
+    route: Mapped[Optional["Route"]] = Relationship(back_populates="holds_in_route")
+    hold: Mapped[Optional["Hold"]] = Relationship(back_populates="routes")

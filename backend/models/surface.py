@@ -1,6 +1,11 @@
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship
 from .base import BaseTable
+
+if TYPE_CHECKING:
+    from .wall import Wall
+    from .hold import Hold
 
 class Surface(BaseTable, table=True):
     wall_id: Optional[int] = Field(default=None, foreign_key="wall.id")
@@ -17,5 +22,5 @@ class Surface(BaseTable, table=True):
     normal_y: float
     normal_z: float
 
-    wall: Optional["Wall"] = Relationship(back_populates="surfaces")
-    holds: List["Hold"] = Relationship(back_populates="surface")
+    wall: Mapped[Optional["Wall"]] = Relationship(back_populates="surfaces")
+    holds: Mapped[List["Hold"]] = Relationship(back_populates="surface")

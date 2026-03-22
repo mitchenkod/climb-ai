@@ -9,3 +9,6 @@ docker-build:
 
 docker-run:
 	docker-compose up
+
+migrate:
+	python3 scripts/migrate.py

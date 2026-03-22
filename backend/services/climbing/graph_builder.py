@@ -5,7 +5,7 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from backend.models.graph import GraphNode, GraphNodeHold, MovementGraph
+from backend.models.graph import Movement, MovementHold, MovementGraph, BodyPosition
 from sqlmodel import select 
 from backend.models.hold import Hold
 from typing import Dict, List
@@ -15,18 +15,18 @@ from backend.db import get_session
 def main():
     print("Building movement graph...")
     for session in get_session():
-        build_graph(session.exec(select(Hold)).all(), max_contacts=4, distance_threshold=0.1)
+        create_movement_graph(session.exec(select(Hold)).all(), max_contacts=4, distance_threshold=0.1)
         break
 
 
-def build_graph(holds, max_contacts=4, distance_threshold=0.1):
+def create_movement_graph(holds, max_contacts=4, distance_threshold=0.1):
     graph = MovementGraph()
     hold_ids = [h.id for h in holds]
     hold_map = {h.id: h for h in holds}
 
     print(f"Total holds: {len(holds)}, hold IDs: {hold_ids}")
     
-    # Ищем узлы: для каждого hold берем близкие к нему holds (в пределах distance_threshold)
+    # Ищем движения: для каждого hold берем близкие к нему holds (в пределах distance_threshold)
     nodes = []
     created_signatures = set()  # Избегаем дубликатов
     
@@ -43,14 +43,14 @@ def build_graph(holds, max_contacts=4, distance_threshold=0.1):
         print(f"Hold {anchor_hold.id}: found {len(nearby_holds)} nearby holds within {distance_threshold}")
         
         # Создать комбинации из близких holds (от 1 до max_contacts)
-        for k in range(1, min(max_contacts, len(nearby_holds)) + 1):
+        for k in range(2, min(max_contacts, len(nearby_holds)) + 1):
             for c in combinations(nearby_holds, k):
                 signature = ",".join(str(x) for x in sorted(c))
                 
-                # Пропускаем уже созданные узлы
+                # Пропускаем уже созданные движения
                 if signature not in created_signatures:
-                    print(f"Creating node for holds: {c}, signature: {signature}")
-                    nodes.append(GraphNode(signature=signature))
+                    print(f"Creating movement for holds: {c}, signature: {signature}")
+                    nodes.append(Movement(signature=signature))
                     created_signatures.add(signature)
 
     print(f"Created {len(nodes)} unique nodes")
@@ -58,7 +58,7 @@ def build_graph(holds, max_contacts=4, distance_threshold=0.1):
     for node in nodes:
         graph.add_node(node)
 
-    # рёбра
+    # переходы (BodyPosition)
     for node in nodes:
         for h_out in node.holds:
             for h_in in hold_ids:
@@ -70,42 +70,48 @@ def build_graph(holds, max_contacts=4, distance_threshold=0.1):
                 new_holds.append(h_in)
 
                 signature = ",".join(str(x) for x in sorted(new_holds))
-                new_node = GraphNode(signature=signature)
+                new_node = Movement(signature=signature)
 
                 cost = compute_transition_cost()
-                print(f"Computing transition cost for edge: {node.holds} -> {new_holds}, cost: {cost}")
+                print(f"Computing transition cost for transition: {node.holds} -> {new_holds}, cost: {cost}")
 
                 if cost is None:
                     continue
 
-                graph.add_edge(...)
-    
+                edge = BodyPosition(
+                    from_movement=node,
+                    to_movement=new_node,
+                    moved_hand="L",
+                    cost=cost,
+                )
+                graph.add_edge(edge)
+
     return graph, nodes, hold_map
 
 def compute_transition_cost():
     return 1.0  # заглушка, реальная логика будет сложнее
 
-def get_or_create_node(session, hold_ids):
+def get_or_create_movement(session, hold_ids):
     signature = make_signature(hold_ids)
 
-    node = session.exec(
-        select(GraphNode).where(GraphNode.signature == signature)
+    movement = session.exec(
+        select(Movement).where(Movement.signature == signature)
     ).first()
 
-    if node:
-        return node
+    if movement:
+        return movement
 
-    node = GraphNode(signature=signature)
-    session.add(node)
+    movement = Movement(signature=signature)
+    session.add(movement)
     session.commit()
-    session.refresh(node)
+    session.refresh(movement)
 
     for hid in hold_ids:
-        session.add(GraphNodeHold(node_id=node.id, hold_id=hid))
+        session.add(MovementHold(movement_id=movement.id, hold_id=hid))
 
     session.commit()
 
-    return node
+    return movement
 
 
 def make_signature(hold_ids):

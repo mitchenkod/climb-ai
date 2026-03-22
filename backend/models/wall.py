@@ -1,12 +1,17 @@
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship
 from .base import BaseTable
+
+if TYPE_CHECKING:
+    from .gym import Gym
+    from .surface import Surface
 
 class Wall(BaseTable, table=True):
     gym_id: Optional[int] = Field(default=None, foreign_key="gym.id")
 
-    gym: Optional["Gym"] = Relationship(back_populates="walls")
-    surfaces: List["Surface"] = Relationship(back_populates="wall")
+    gym: Mapped[Optional["Gym"]] = Relationship(back_populates="walls")
+    surfaces: Mapped[List["Surface"]] = Relationship(back_populates="wall")
 
     def add_plane(self, surface):
         self.surfaces.append(surface)

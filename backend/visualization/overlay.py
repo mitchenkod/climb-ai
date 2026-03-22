@@ -56,7 +56,7 @@ def draw_graph(image_path, graph_nodes, hold_map, output_path="output_graph.jpg"
     
     Args:
         image_path: путь к исходному изображению
-        graph_nodes: список GraphNode объектов из графа
+        graph_nodes: список Movement объектов из графа
         hold_map: словарь {hold_id: Hold object} для получения координат
         output_path: путь сохранения результата
     """
