@@ -1,17 +1,27 @@
+import base64
+from io import BytesIO
+import tempfile
 import unittest
 
+from PIL import Image
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine
 
 import backend.db.database as database
+import backend.api.wall as wall_api
 from backend.api.gym import GymInput, save_gym
+from backend.models.route import Route
 from backend.api.wall import (
+    HoldUpdateInput,
     HoldsInput,
     SurfaceGeometryInput,
+    WallImageUploadInput,
     WallInput,
     add_holds,
     get_wall,
     save_wall,
+    upload_wall_image,
+    update_hold,
     update_surface_geometry,
 )
 from backend.geometry.normalization import (
@@ -31,9 +41,14 @@ class WallGeometryTest(unittest.TestCase):
         )
         database.init_db()
         self.session = Session(database.engine)
+        self.original_image_dir = wall_api.IMAGE_DIR
+        self.tmpdir = tempfile.TemporaryDirectory()
+        wall_api.IMAGE_DIR = wall_api.Path(self.tmpdir.name)
 
     def tearDown(self):
         self.session.close()
+        wall_api.IMAGE_DIR = self.original_image_dir
+        self.tmpdir.cleanup()
         database.engine = self.original_engine
 
     def create_wall(self, width_m=3.0, height_m=4.0, image_width_px=300, image_height_px=400):
@@ -96,7 +111,17 @@ class WallGeometryTest(unittest.TestCase):
 
         result = add_holds(
             1,
-            HoldsInput(holds=[{"x_px": 150, "y_px": 100, "hold_type": "jug"}]),
+            HoldsInput(
+                holds=[
+                    {
+                        "x_px": 150,
+                        "y_px": 100,
+                        "hold_type": "jug",
+                        "quality": 8,
+                        "force_vectors": [{"name": "down", "dx": 0, "dy": -1}],
+                    }
+                ]
+            ),
             self.session,
         )
         hold = result["holds"][0]
@@ -107,6 +132,65 @@ class WallGeometryTest(unittest.TestCase):
         self.assertEqual(hold.y_px, 100)
         self.assertEqual(hold.x_m, 1.5)
         self.assertEqual(hold.y_m, 3.0)
+        self.assertEqual(hold.quality, 8)
+        self.assertEqual(hold.force_vectors, '[{"name": "down", "dx": 0, "dy": -1}]')
+
+    def test_upload_wall_image_saves_image_and_uses_actual_image_dimensions(self):
+        save_gym(GymInput(name="Upload Gym"), self.session)
+        buffer = BytesIO()
+        Image.new("RGB", (1, 1), color="white").save(buffer, format="PNG")
+        png_1x1 = base64.b64encode(buffer.getvalue()).decode("ascii")
+
+        result = upload_wall_image(
+            WallImageUploadInput(
+                gym_id=1,
+                image_name="wall.png",
+                image_data=f"data:image/png;base64,{png_1x1}",
+                width_m=3.0,
+                height_m=4.0,
+                angle=10.0,
+            ),
+            self.session,
+        )
+        wall = get_wall(result["wall_id"], self.session)
+        surface = wall["surfaces"][0]
+
+        self.assertTrue((wall_api.IMAGE_DIR / wall["image_name"]).exists())
+        self.assertEqual(surface.image_width_px, 1)
+        self.assertEqual(surface.image_height_px, 1)
+        self.assertEqual(surface.width_m, 3.0)
+        self.assertEqual(surface.height_m, 4.0)
+        self.assertEqual(surface.angle, 10.0)
+
+    def test_update_hold_updates_geometry_metadata_and_force_vectors(self):
+        self.create_wall()
+        add_holds(
+            1,
+            HoldsInput(holds=[{"x_px": 150, "y_px": 100, "hold_type": "jug"}]),
+            self.session,
+        )
+
+        hold = update_hold(
+            1,
+            HoldUpdateInput(
+                x_px=30,
+                y_px=40,
+                hold_type="sidepull",
+                quality=9,
+                force_vectors=[{"name": "left", "dx": -1, "dy": 0}],
+            ),
+            self.session,
+        )
+
+        self.assertEqual(hold.x, 0.1)
+        self.assertEqual(hold.y, 0.1)
+        self.assertEqual(hold.x_px, 30)
+        self.assertEqual(hold.y_px, 40)
+        self.assertEqual(hold.x_m, 0.3)
+        self.assertEqual(hold.y_m, 3.6)
+        self.assertEqual(hold.hold_type, "sidepull")
+        self.assertEqual(hold.quality, 9)
+        self.assertEqual(hold.force_vectors, '[{"name": "left", "dx": -1, "dy": 0}]')
 
     def test_add_hold_with_normalized_coords_derives_pixel_and_meter_coords(self):
         self.create_wall()
@@ -156,6 +240,26 @@ class WallGeometryTest(unittest.TestCase):
         self.assertEqual(hold.y_px, 100)
         self.assertEqual(hold.x_m, 3.0)
         self.assertEqual(hold.y_m, 6.0)
+
+    def test_update_surface_geometry_is_blocked_after_route_creation(self):
+        self.create_wall()
+        self.session.add(Route(name="existing route", wall_id=1))
+        self.session.commit()
+
+        with self.assertRaises(wall_api.HTTPException) as context:
+            update_surface_geometry(
+                1,
+                SurfaceGeometryInput(
+                    width_m=6.0,
+                    height_m=8.0,
+                    image_width_px=300,
+                    image_height_px=400,
+                    angle=20.0,
+                ),
+                self.session,
+            )
+
+        self.assertEqual(context.exception.status_code, 409)
 
 
 if __name__ == "__main__":

@@ -8,26 +8,80 @@
 
 <h2>Hold Annotation Tool</h2>
 
-<label>
-    Wall ID
-    <input id="wallId" type="number" min="1" value="1">
-</label>
-<button onclick="loadWall()">Load</button>
+<section class="toolbar">
+    <label>
+        Gym ID
+        <input id="gymId" type="number" min="1" value="1">
+    </label>
 
-<select id="holdType">
-    <option value="jug">Jug</option>
-    <option value="crimp">Crimp</option>
-    <option value="sloper">Sloper</option>
-    <option value="pinch">Pinch</option>
-</select>
+    <label>
+        Wall ID
+        <input id="wallId" type="number" min="1" value="1">
+    </label>
+    <button onclick="loadWall()">Load</button>
+    <button onclick="updateCurrentSurfaceGeometry()">Update wall params</button>
 
-<button onclick="saveAnnotations()">Save</button>
+    <label>
+        Photo
+        <input id="wallImage" type="file" accept="image/*">
+    </label>
+
+    <label>
+        Width, m
+        <input id="wallWidthM" type="number" min="0.1" step="0.1" value="3">
+    </label>
+
+    <label>
+        Height, m
+        <input id="wallHeightM" type="number" min="0.1" step="0.1" value="4">
+    </label>
+
+    <label>
+        Angle
+        <input id="wallAngle" type="number" step="1" value="0">
+    </label>
+
+    <button onclick="uploadWall()">Upload wall</button>
+</section>
+
+<section class="toolbar">
+    <label>
+        Type
+        <select id="holdType">
+            <option value="jug">Jug</option>
+            <option value="crimp">Crimp</option>
+            <option value="sloper">Sloper</option>
+            <option value="pinch">Pinch</option>
+            <option value="pocket">Pocket</option>
+            <option value="sidepull">Sidepull</option>
+            <option value="undercling">Undercling</option>
+        </select>
+    </label>
+
+    <label>
+        Quality
+        <input id="holdQuality" type="range" min="1" max="10" value="5">
+        <span id="holdQualityValue">5</span>
+    </label>
+
+    <fieldset>
+        <legend>Force vectors</legend>
+        <label><input class="forceVector" type="checkbox" value="down" checked> Down</label>
+        <label><input class="forceVector" type="checkbox" value="up"> Up</label>
+        <label><input class="forceVector" type="checkbox" value="left"> Left</label>
+        <label><input class="forceVector" type="checkbox" value="right"> Right</label>
+    </fieldset>
+
+    <button onclick="saveAnnotations()">Save</button>
+    <button onclick="saveSelectedHoldSettings()">Update selected</button>
+    <button onclick="generateRoute()">Generate route</button>
+</section>
+
+<p id="status"></p>
 
 <br><br>
 
 <canvas id="canvas"></canvas>
-
-<button onclick="generateRoute()">Generate route</button>
 
 <script src="/static/wall.js"></script>
 

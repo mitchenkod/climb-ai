@@ -31,6 +31,8 @@ def ensure_schema_patches():
         add_column(connection, hold_columns, "hold", "y_px", "FLOAT")
         add_column(connection, hold_columns, "hold", "x_m", "FLOAT")
         add_column(connection, hold_columns, "hold", "y_m", "FLOAT")
+        add_column(connection, hold_columns, "hold", "quality", "INTEGER NOT NULL DEFAULT 5")
+        add_column(connection, hold_columns, "hold", "force_vectors", "VARCHAR NOT NULL DEFAULT '[]'")
 
 
 def table_columns(connection, table_name):

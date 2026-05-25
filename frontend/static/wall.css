@@ -1,6 +1,41 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 16px;
+}
+
+.toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.toolbar label {
+    align-items: center;
+    display: inline-flex;
+    gap: 6px;
+}
+
+fieldset {
+    border: 1px solid #ccc;
+    display: inline-flex;
+    gap: 8px;
+    margin: 0;
+    padding: 4px 8px 6px;
+}
+
+input[type="number"] {
+    width: 80px;
+}
+
 canvas {
     border: 1px solid black;
     cursor: crosshair;
     max-width: 100%;
     height: auto;
+}
+
+#status {
+    min-height: 20px;
 }

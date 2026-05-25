@@ -21,6 +21,8 @@ class Hold(BaseTable, table=True):
 
     hold_type: str
     size: Optional[str] = None
+    quality: int = Field(default=5, ge=1, le=10)
+    force_vectors: str = "[]"
 
     surface: Mapped[Optional["Surface"]] = Relationship(back_populates="holds")
     routes: Mapped[List["HoldInRoute"]] = Relationship(back_populates="hold")
