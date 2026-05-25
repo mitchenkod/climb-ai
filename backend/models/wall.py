@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 class Wall(BaseTable, table=True):
     gym_id: Optional[int] = Field(default=None, foreign_key="gym.id")
+    image_name: str = "wall.jpg"
 
     gym: Mapped[Optional["Gym"]] = Relationship(back_populates="walls")
     surfaces: Mapped[List["Surface"]] = Relationship(back_populates="wall")

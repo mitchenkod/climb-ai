@@ -1,4 +1,6 @@
 canvas {
     border: 1px solid black;
     cursor: crosshair;
+    max-width: 100%;
+    height: auto;
 }

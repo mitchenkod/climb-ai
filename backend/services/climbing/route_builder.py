@@ -13,6 +13,7 @@ from backend.models.hold_in_route import HoldInRoute
 from backend.models.hold import Hold
 from backend.models.graph import MovementGraph, Movement, MovementHold, BodyPosition
 from backend.db import get_session
+from sqlmodel import select
 import random
 from itertools import combinations
 
@@ -113,18 +114,36 @@ class RouteBuilder:
 
     def set_start_holds(self, route: Route, start_holds: List[Hold]):
         """Добавляет стартовые зацепы в маршрут."""
-        for h in start_holds:
-            HoldInRoute(route=route, hold=h, role='start')
+        for index, h in enumerate(start_holds):
+            hold_in_route = HoldInRoute(
+                route=route,
+                hold=h,
+                role='start',
+                order_index=index,
+                start_limb_count=1,
+            )
+            if self.session:
+                self.session.add(hold_in_route)
 
     def create_body_position_for_holds(self, holds: List[Hold]) -> BodyPosition:
         """Создает Movement + BodyPosition для заданных зацепов"""
         signature = ",".join(str(h.id) for h in sorted(holds, key=lambda h: h.id))
-        movement = Movement(signature=signature)
+        movement = None
+        if self.session:
+            movement = self.session.exec(
+                select(Movement).where(Movement.signature == signature)
+            ).first()
 
-        for h in holds:
-            association = MovementHold(movement=movement, hold=h)
+        if not movement:
+            movement = Movement(signature=signature)
+
+            for h in holds:
+                association = MovementHold(movement=movement, hold=h)
+                if self.session:
+                    self.session.add(association)
+
             if self.session:
-                self.session.add(association)
+                self.session.add(movement)
 
         center_position = BodyPosition(
             from_movement=movement,
@@ -134,7 +153,6 @@ class RouteBuilder:
         )
 
         if self.session:
-            self.session.add(movement)
             self.session.add(center_position)
 
         return center_position
