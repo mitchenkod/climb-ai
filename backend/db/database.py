@@ -4,7 +4,7 @@ import backend.models
 
 DATABSE_URL = "sqlite:///backend/app.db"
 
-engine = create_engine(DATABSE_URL, echo=True)
+engine = create_engine(DATABSE_URL, echo=False)
 
 def init_db():
     SQLModel.metadata.create_all(engine)
@@ -25,6 +25,7 @@ def ensure_schema_patches():
         add_column(connection, surface_columns, "surface", "height_m", "FLOAT NOT NULL DEFAULT 1.0")
         add_column(connection, surface_columns, "surface", "image_width_px", "INTEGER NOT NULL DEFAULT 1")
         add_column(connection, surface_columns, "surface", "image_height_px", "INTEGER NOT NULL DEFAULT 1")
+        add_column(connection, surface_columns, "surface", "work_area", "VARCHAR NOT NULL DEFAULT '[]'")
 
         hold_columns = table_columns(connection, "hold")
         add_column(connection, hold_columns, "hold", "x_px", "FLOAT")

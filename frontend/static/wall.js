@@ -3,13 +3,22 @@ const ctx = canvas.getContext("2d");
 
 let holds = [];
 let savedHolds = [];
-let currentWallId = new URLSearchParams(window.location.search).get("wall_id") || "1";
+let currentWallId = initialWallId();
 let imageName = "wall.jpg";
 let currentSurfaceId = null;
+let currentWorkArea = [];
 let draggingHoldId = null;
 let selectedHoldId = null;
+let selectedDraftHold = null;
 let dragMoved = false;
 let suppressNextClick = false;
+let routeMarks = [];
+let nextPositionMarks = [];
+let routeRequestSeq = 0;
+let routesPage = 1;
+let routesPageSize = 8;
+let routesTotal = 0;
+let selectedRouteId = null;
 
 const img = new Image();
 const forceVectorDirections = {
@@ -23,15 +32,40 @@ document.getElementById("wallId").value = currentWallId;
 document.getElementById("holdQuality").addEventListener("input", function (event) {
     document.getElementById("holdQualityValue").textContent = event.target.value;
 });
+document.getElementById("routesRefresh").addEventListener("click", function () {
+    loadRoutes(routesPage);
+});
+document.getElementById("routesPrev").addEventListener("click", function () {
+    loadRoutes(routesPage - 1);
+});
+document.getElementById("routesNext").addEventListener("click", function () {
+    loadRoutes(routesPage + 1);
+});
 
 function setStatus(message) {
     document.getElementById("status").textContent = message;
+}
+
+function initialWallId() {
+    const queryWallId = new URLSearchParams(window.location.search).get("wall_id");
+    if (queryWallId) {
+        return queryWallId;
+    }
+
+    const match = window.location.pathname.match(/\/static\/wall\/(\d+)$/);
+    return match ? match[1] : "1";
 }
 
 function loadWall() {
     currentWallId = document.getElementById("wallId").value || "1";
     holds = [];
     savedHolds = [];
+    selectedHoldId = null;
+    selectedDraftHold = null;
+    routeMarks = [];
+    nextPositionMarks = [];
+    selectedRouteId = null;
+    renderRouteResult(null);
 
     fetch(`/api/walls/${currentWallId}`, {
         method: "GET",
@@ -49,11 +83,14 @@ function loadWall() {
         if (data.surfaces && data.surfaces.length > 0) {
             const surface = data.surfaces[0];
             currentSurfaceId = surface.id;
+            currentWorkArea = parseWorkArea(surface.work_area);
             document.getElementById("wallWidthM").value = surface.width_m || surface.width || 1;
             document.getElementById("wallHeightM").value = surface.height_m || surface.height || 1;
             document.getElementById("wallAngle").value = surface.angle || 0;
         }
         img.src = `/images/${imageName}`;
+        routesPage = 1;
+        loadRoutes(routesPage);
         setStatus(`Loaded wall ${currentWallId}`);
     })
     .catch(error => alert(error.message));
@@ -113,8 +150,10 @@ canvas.addEventListener("click", function (event) {
     const existingHold = findHold(pixelX, pixelY);
     if (existingHold) {
         applyHoldToControls(existingHold);
-        selectedHoldId = existingHold.id || null;
-        setStatus(`Selected hold ${existingHold.id}`);
+        selectedHoldId = hasSavedId(existingHold) ? existingHold.id : null;
+        selectedDraftHold = hasSavedId(existingHold) ? null : existingHold;
+        redraw();
+        setStatus(hasSavedId(existingHold) ? `Selected hold ${existingHold.id}` : "Selected draft hold");
         return;
     }
 
@@ -125,7 +164,7 @@ canvas.addEventListener("click", function (event) {
     const quality = Number(document.getElementById("holdQuality").value);
     const forceVectors = selectedForceVectors();
 
-    holds.push({
+    const draftHold = {
         x,
         y,
         x_px: pixelX,
@@ -133,7 +172,10 @@ canvas.addEventListener("click", function (event) {
         hold_type: holdType,
         quality,
         force_vectors: forceVectors
-    });
+    };
+    holds.push(draftHold);
+    selectedHoldId = null;
+    selectedDraftHold = draftHold;
 
     redraw();
 });
@@ -141,12 +183,15 @@ canvas.addEventListener("click", function (event) {
 canvas.addEventListener("mousedown", function (event) {
     const point = eventPoint(event);
     const hold = findHold(point.x, point.y);
-    if (!hold || !hold.id) {
+    if (!hold || !hasSavedId(hold)) {
         return;
     }
 
     draggingHoldId = hold.id;
+    selectedHoldId = hold.id;
+    selectedDraftHold = null;
     dragMoved = false;
+    redraw();
 });
 
 canvas.addEventListener("mousemove", function (event) {
@@ -200,19 +245,25 @@ canvas.addEventListener("contextmenu", function (event) {
         return;
     }
 
-    if (hold.id) {
+    if (hasSavedId(hold)) {
         fetch(`/api/walls/${currentWallId}/holds/${hold.id}`, { method: "DELETE" })
             .then(response => {
                 if (!response.ok) {
                     throw new Error("Delete failed");
                 }
                 savedHolds = savedHolds.filter(item => item.id !== hold.id);
+                if (selectedHoldId === hold.id) {
+                    selectedHoldId = null;
+                }
                 redraw();
                 setStatus(`Deleted hold ${hold.id}`);
             })
             .catch(error => alert(error.message));
     } else {
         holds = holds.filter(item => item !== hold);
+        if (selectedDraftHold === hold) {
+            selectedDraftHold = null;
+        }
         redraw();
     }
 });
@@ -238,6 +289,10 @@ function findHold(x, y) {
         const dy = point.y - y;
         return Math.sqrt(dx * dx + dy * dy) <= 10;
     });
+}
+
+function hasSavedId(hold) {
+    return hold.id !== undefined && hold.id !== null;
 }
 
 function holdPixelPoint(hold) {
@@ -310,8 +365,12 @@ function selectedForceVectors() {
 function redraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0);
+    drawWorkArea();
     savedHolds.forEach(hold => drawHold(hold, "red"));
     holds.forEach(hold => drawHold(hold, "orange"));
+    drawRoute();
+    drawNextPosition();
+    drawSelectedHold();
 }
 
 function drawHold(hold, color = "red") {
@@ -351,6 +410,70 @@ function drawPixelPoint(x, y, color = "red") {
     ctx.fill();
 }
 
+function parseWorkArea(rawWorkArea) {
+    if (!rawWorkArea) {
+        return [];
+    }
+    if (Array.isArray(rawWorkArea)) {
+        return rawWorkArea;
+    }
+    try {
+        return JSON.parse(rawWorkArea);
+    } catch (_error) {
+        return [];
+    }
+}
+
+function drawWorkArea() {
+    if (!currentWorkArea || currentWorkArea.length !== 4) {
+        return;
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    currentWorkArea.forEach((point, index) => {
+        if (index === 0) {
+            ctx.moveTo(point.x, point.y);
+        } else {
+            ctx.lineTo(point.x, point.y);
+        }
+    });
+    ctx.closePath();
+    ctx.fillStyle = "rgba(37, 99, 235, 0.08)";
+    ctx.strokeStyle = "rgba(37, 99, 235, 0.72)";
+    ctx.lineWidth = 3;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawSelectedHold() {
+    const selectedHold = savedHolds.find(hold => hold.id === selectedHoldId) || selectedDraftHold;
+    const point = selectedHold ? holdPixelPoint(selectedHold) : null;
+    if (!point) {
+        return;
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 14, 0, 2 * Math.PI);
+    ctx.fillStyle = "rgba(37, 99, 235, 0.16)";
+    ctx.fill();
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(point.x - 18, point.y);
+    ctx.lineTo(point.x + 18, point.y);
+    ctx.moveTo(point.x, point.y - 18);
+    ctx.lineTo(point.x, point.y + 18);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+}
+
 function drawForceVectors(x, y, vectors) {
     vectors.forEach(vector => {
         const length = 24;
@@ -381,12 +504,72 @@ function drawQualityLabel(x, y, quality) {
     ctx.fillText(String(quality), x + 8, y - 8);
 }
 
-function drawCircle(x, y) {
+function drawCircle(x, y, color = "green", radius = 12, lineWidth = 3) {
     ctx.beginPath();
-    ctx.arc(x * canvas.width, y * canvas.height, 12, 0, 2 * Math.PI);
-    ctx.strokeStyle = "green";
-    ctx.lineWidth = 3;
+    ctx.arc(x * canvas.width, y * canvas.height, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
     ctx.stroke();
+}
+
+function drawRoute() {
+    if (routeMarks.length === 0) {
+        return;
+    }
+
+    const points = routeMarks
+        .map(mark => ({ mark, point: holdPixelPoint(mark.hold) }))
+        .filter(item => item.point);
+
+    if (points.length === 0) {
+        return;
+    }
+
+    ctx.save();
+    points.forEach(item => drawRouteHoldMark(item.mark, item.point));
+    ctx.restore();
+}
+
+function drawRouteHoldMark(mark, point) {
+    const color = routeMarkColor(mark.role);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 17, 0, 2 * Math.PI);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 23, 0, 2 * Math.PI);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+}
+
+function routeMarkColor(role) {
+    return isRouteEndpoint(role) ? "#facc15" : "#dc2626";
+}
+
+function isRouteEndpoint(role) {
+    return role === "start" || role === "finish" || role === "top";
+}
+
+function drawNextPosition() {
+    if (nextPositionMarks.length === 0) {
+        return;
+    }
+
+    ctx.save();
+    nextPositionMarks
+        .map(hold => holdPixelPoint(hold))
+        .filter(point => point)
+        .forEach(point => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 29, 0, 2 * Math.PI);
+            ctx.strokeStyle = "#16a34a";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+        });
+    ctx.restore();
 }
 
 function saveAnnotations() {
@@ -406,6 +589,8 @@ function saveAnnotations() {
     .then(data => {
         savedHolds = data.holds || [];
         holds = [];
+        selectedHoldId = null;
+        selectedDraftHold = null;
         redraw();
         setStatus("Annotations saved");
     });
@@ -451,6 +636,15 @@ function uploadWall() {
 }
 
 function generateRoute() {
+    const requestSeq = routeRequestSeq + 1;
+    routeRequestSeq = requestSeq;
+    routeMarks = [];
+    nextPositionMarks = [];
+    selectedRouteId = null;
+    renderRouteResult(null);
+    redraw();
+    setStatus("Generating route...");
+
     fetch("/api/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -458,11 +652,285 @@ function generateRoute() {
             wall_id: Number(currentWallId)
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.detail || "Route generation failed");
+            });
+        }
+        return response.json();
+    })
     .then(data => {
+        if (requestSeq !== routeRequestSeq) {
+            return;
+        }
+        selectedRouteId = data.route_id;
+        routeMarks = routeMarksFromRoute(data);
         redraw();
-        data.start_holds.forEach(hold => drawCircle(hold.x, hold.y));
+        renderRouteResult(data);
+        loadRoutes(1);
+        if (data.difficulty_score !== null && data.difficulty_score !== undefined) {
+            setStatus(`Generated route. Start difficulty: ${data.difficulty_score.toFixed(2)}`);
+        } else {
+            setStatus("Generated route");
+        }
+    })
+    .catch(error => {
+        if (requestSeq !== routeRequestSeq) {
+            return;
+        }
+        redraw();
+        setStatus(error.message);
+        alert(error.message);
     });
+}
+
+function loadRoutes(page = 1) {
+    const nextPage = Math.max(1, page);
+    fetch(`/api/walls/${currentWallId}/routes?page=${nextPage}&page_size=${routesPageSize}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.detail || "Routes loading failed");
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        routesPage = data.page || nextPage;
+        routesPageSize = data.page_size || routesPageSize;
+        routesTotal = data.total || 0;
+        renderRoutesList(data.routes || []);
+    })
+    .catch(error => setStatus(error.message));
+}
+
+function renderRoutesList(routes) {
+    const list = document.getElementById("routesList");
+    const pageInfo = document.getElementById("routesPageInfo");
+    const prev = document.getElementById("routesPrev");
+    const next = document.getElementById("routesNext");
+    const totalPages = Math.max(1, Math.ceil(routesTotal / routesPageSize));
+
+    list.innerHTML = "";
+    if (routes.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "route-list-meta";
+        empty.textContent = `No routes for wall #${currentWallId}`;
+        list.appendChild(empty);
+    }
+
+    routes.forEach(route => list.appendChild(routeListItem(route)));
+    pageInfo.textContent = `${routesPage} / ${totalPages}`;
+    prev.disabled = routesPage <= 1;
+    next.disabled = routesPage >= totalPages;
+}
+
+function routeListItem(route) {
+    const item = document.createElement("div");
+    item.className = "route-list-item";
+    if (route.route_id === selectedRouteId) {
+        item.classList.add("is-selected");
+    }
+
+    const description = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "route-list-title";
+    title.textContent = `Route #${route.route_id}`;
+    const meta = document.createElement("div");
+    meta.className = "route-list-meta";
+    meta.textContent = routeMeta(route);
+    description.appendChild(title);
+    description.appendChild(meta);
+
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.textContent = "Select";
+    selectButton.addEventListener("click", () => selectRoute(route));
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => deleteRoute(route.route_id));
+
+    const nextMoveButton = document.createElement("button");
+    nextMoveButton.type = "button";
+    nextMoveButton.textContent = "Next move";
+    nextMoveButton.addEventListener("click", () => addNextMove(route));
+
+    item.appendChild(description);
+    item.appendChild(selectButton);
+    item.appendChild(nextMoveButton);
+    item.appendChild(deleteButton);
+    return item;
+}
+
+function routeMeta(route) {
+    const holds = (route.start_holds || []).map(hold => hold.id).join(", ") || "none";
+    const score = route.difficulty_score !== null && route.difficulty_score !== undefined
+        ? formatNumber(route.difficulty_score)
+        : "-";
+    return `start holds: ${holds} | score: ${score}`;
+}
+
+function routeMarksFromRoute(route) {
+    if (Array.isArray(route.holds) && route.holds.length > 0) {
+        return route.holds
+            .filter(item => item.hold)
+            .map(item => ({
+                role: item.role || "intermediate",
+                hold: item.hold
+            }));
+    }
+
+    return (route.start_holds || []).map(hold => ({
+        role: "start",
+        hold
+    }));
+}
+
+function selectRoute(route) {
+    selectedRouteId = route.route_id;
+    routeMarks = routeMarksFromRoute(route);
+    nextPositionMarks = [];
+    renderRouteResult(route);
+    redraw();
+    loadRoutes(routesPage);
+    setStatus(`Selected route #${route.route_id}`);
+}
+
+function deleteRoute(routeId) {
+    fetch(`/api/walls/${currentWallId}/routes/${routeId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.detail || "Route deletion failed");
+            });
+        }
+        return response.json();
+    })
+    .then(() => {
+        if (selectedRouteId === routeId) {
+            selectedRouteId = null;
+            routeMarks = [];
+            nextPositionMarks = [];
+            renderRouteResult(null);
+            redraw();
+        }
+        const maxPage = Math.max(1, Math.ceil((routesTotal - 1) / routesPageSize));
+        loadRoutes(Math.min(routesPage, maxPage));
+        setStatus(`Deleted route #${routeId}`);
+    })
+    .catch(error => {
+        setStatus(error.message);
+        alert(error.message);
+    });
+}
+
+function addNextMove(route = null) {
+    if (route) {
+        selectedRouteId = route.route_id;
+        routeMarks = routeMarksFromRoute(route);
+        nextPositionMarks = [];
+        renderRouteResult(route);
+        redraw();
+    }
+
+    if (!selectedRouteId) {
+        alert("Select a route first");
+        return;
+    }
+
+    fetch(`/api/walls/${currentWallId}/routes/${selectedRouteId}/next_move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.detail || "Next move failed");
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        const route = data.route;
+        selectedRouteId = route.route_id;
+        routeMarks = routeMarksFromRoute(route);
+        nextPositionMarks = (data.next_position && data.next_position.holds) || [];
+        renderRouteResult(route);
+        loadRoutes(routesPage);
+        redraw();
+        setStatus(`Next move: ${data.role}, position score ${formatNumber(data.next_position && data.next_position.score)}`);
+    })
+    .catch(error => {
+        setStatus(error.message);
+        alert(error.message);
+    });
+}
+
+function renderRouteResult(data) {
+    const result = document.getElementById("routeResult");
+    const summary = document.getElementById("routeSummary");
+    const breakdownBody = document.getElementById("routeBreakdown");
+
+    if (!data) {
+        result.hidden = true;
+        summary.textContent = "";
+        breakdownBody.innerHTML = "";
+        return;
+    }
+
+    if (!data.start_position_score) {
+        const startHoldIds = (data.start_holds || []).map(hold => hold.id).join(", ");
+        result.hidden = false;
+        summary.textContent = [
+            `Route #${data.route_id}`,
+            `start holds: ${startHoldIds || "none"}`,
+            `score: ${formatNumber(data.difficulty_score)}`
+        ].join(" | ");
+        breakdownBody.innerHTML = "";
+        return;
+    }
+
+    const positionScore = data.start_position_score;
+    const startHoldIds = (data.start_holds || []).map(hold => hold.id).join(", ");
+    result.hidden = false;
+    summary.textContent = [
+        `Route #${data.route_id}`,
+        `start holds: ${startHoldIds || "none"}`,
+        `score: ${formatNumber(positionScore.score)}`,
+        `realistic: ${positionScore.is_realistic ? "yes" : "no"}`
+    ].join(" | ");
+
+    breakdownBody.innerHTML = "";
+    Object.keys(positionScore.breakdown || {}).forEach(name => {
+        const row = document.createElement("tr");
+        row.appendChild(tableCell(name));
+        row.appendChild(tableCell(formatNumber(positionScore.breakdown[name])));
+        row.appendChild(tableCell(formatNumber(positionScore.weights[name])));
+        row.appendChild(tableCell(formatNumber(positionScore.weighted_breakdown[name])));
+        breakdownBody.appendChild(row);
+    });
+}
+
+function tableCell(value) {
+    const cell = document.createElement("td");
+    cell.textContent = value;
+    return cell;
+}
+
+function formatNumber(value) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return "-";
+    }
+    return Number(value).toFixed(3);
 }
 
 loadWall();

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>New Wall</title>
+    <link rel="stylesheet" href="/static/wall.css">
+</head>
+<body>
+<header class="page-header">
+    <h2>New wall</h2>
+    <a class="button-link" href="/static/walls">Walls</a>
+</header>
+
+<section class="toolbar">
+    <label>
+        Gym ID
+        <input id="gymId" type="number" min="1" value="1">
+    </label>
+    <label>
+        Photo
+        <input id="wallImage" type="file" accept="image/*">
+    </label>
+    <label>
+        Width, m
+        <input id="wallWidthM" type="number" min="0.1" step="0.1" value="3">
+    </label>
+    <label>
+        Height, m
+        <input id="wallHeightM" type="number" min="0.1" step="0.1" value="4">
+    </label>
+    <label>
+        Angle
+        <input id="wallAngle" type="number" step="1" value="0">
+    </label>
+    <button onclick="resetWorkArea()">Reset area</button>
+    <button onclick="createWall()">Create wall</button>
+</section>
+
+<p id="status">Select photo and mark 4 wall area corners clockwise from top-left.</p>
+<canvas id="canvas"></canvas>
+
+<script src="/static/wall_new.js"></script>
+</body>
+</html>

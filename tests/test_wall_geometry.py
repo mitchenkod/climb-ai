@@ -162,6 +162,42 @@ class WallGeometryTest(unittest.TestCase):
         self.assertEqual(surface.height_m, 4.0)
         self.assertEqual(surface.angle, 10.0)
 
+    def test_work_area_projection_normalizes_hold_coordinates(self):
+        save_gym(GymInput(name="Projection Gym"), self.session)
+        buffer = BytesIO()
+        Image.new("RGB", (100, 100), color="white").save(buffer, format="PNG")
+        png = base64.b64encode(buffer.getvalue()).decode("ascii")
+
+        result = upload_wall_image(
+            WallImageUploadInput(
+                gym_id=1,
+                image_name="wall.png",
+                image_data=f"data:image/png;base64,{png}",
+                width_m=4.0,
+                height_m=4.0,
+                angle=0.0,
+                work_area=[
+                    {"x": 10, "y": 10},
+                    {"x": 90, "y": 10},
+                    {"x": 90, "y": 90},
+                    {"x": 10, "y": 90},
+                ],
+            ),
+            self.session,
+        )
+
+        hold_result = add_holds(
+            result["wall_id"],
+            HoldsInput(holds=[{"x_px": 50, "y_px": 50, "hold_type": "jug"}]),
+            self.session,
+        )
+        hold = hold_result["holds"][0]
+
+        self.assertAlmostEqual(hold.x, 0.5)
+        self.assertAlmostEqual(hold.y, 0.5)
+        self.assertAlmostEqual(hold.x_m, 2.0)
+        self.assertAlmostEqual(hold.y_m, 2.0)
+
     def test_update_hold_updates_geometry_metadata_and_force_vectors(self):
         self.create_wall()
         add_holds(

@@ -19,6 +19,11 @@ router = APIRouter()
 IMAGE_DIR = Path("frontend/static/images")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
+class ImagePointInput(BaseModel):
+    x: float
+    y: float
+
+
 class WallInput(BaseModel):
     gym_id: int
     image_name: str = "wall.jpg"
@@ -29,6 +34,7 @@ class WallInput(BaseModel):
     image_width_px: int = 1
     image_height_px: int = 1
     angle: float = 0.0
+    work_area: List[ImagePointInput] = PydanticField(default_factory=list)
 
 class HoldInput(BaseModel):
     x: Optional[float] = None
@@ -62,6 +68,7 @@ class WallImageUploadInput(BaseModel):
     width_m: float
     height_m: float
     angle: float = 0.0
+    work_area: List[ImagePointInput] = PydanticField(default_factory=list)
 
 
 class SurfaceGeometryInput(BaseModel):
@@ -83,6 +90,7 @@ def build_default_surface(wall_id: int, data: Optional[WallInput] = None) -> Sur
     image_width_px = data.image_width_px if data else 1
     image_height_px = data.image_height_px if data else 1
     angle = data.angle if data else 0.0
+    work_area = json.dumps([point_dict(point) for point in data.work_area]) if data else "[]"
 
     return Surface(
         wall_id=wall_id,
@@ -93,6 +101,7 @@ def build_default_surface(wall_id: int, data: Optional[WallInput] = None) -> Sur
         height_m=height_m,
         image_width_px=image_width_px,
         image_height_px=image_height_px,
+        work_area=work_area,
         origin_x=0,
         origin_y=0,
         origin_z=0,
@@ -102,12 +111,17 @@ def build_default_surface(wall_id: int, data: Optional[WallInput] = None) -> Sur
     )
 
 
+def point_dict(point: ImagePointInput) -> dict:
+    if hasattr(point, "model_dump"):
+        return point.model_dump()
+    return point.dict()
+
+
 def hold_coordinates(hold_data: HoldInput, surface: Surface) -> tuple[float, float, float, float, float, float]:
     if hold_data.x_px is not None and hold_data.y_px is not None:
         x_px = hold_data.x_px
         y_px = hold_data.y_px
-        x = x_px / surface.image_width_px if surface.image_width_px else 0
-        y = y_px / surface.image_height_px if surface.image_height_px else 0
+        x, y = surface.pixel_to_normalized_coords(x_px, y_px)
     elif hold_data.x is not None and hold_data.y is not None:
         x = hold_data.x
         y = hold_data.y
@@ -127,8 +141,7 @@ def optional_hold_coordinates(
     if hold_data.x_px is not None and hold_data.y_px is not None:
         x_px = hold_data.x_px
         y_px = hold_data.y_px
-        x = x_px / surface.image_width_px if surface.image_width_px else hold.x
-        y = y_px / surface.image_height_px if surface.image_height_px else hold.y
+        x, y = surface.pixel_to_normalized_coords(x_px, y_px)
     elif hold_data.x is not None and hold_data.y is not None:
         x = hold_data.x
         y = hold_data.y
@@ -148,8 +161,7 @@ def recalculate_surface_holds(surface: Surface):
         if hold.x_px is not None and hold.y_px is not None:
             x_px = hold.x_px
             y_px = hold.y_px
-            hold.x = x_px / surface.image_width_px if surface.image_width_px else hold.x
-            hold.y = y_px / surface.image_height_px if surface.image_height_px else hold.y
+            hold.x, hold.y = surface.pixel_to_normalized_coords(x_px, y_px)
         else:
             x_px, y_px = surface.normalized_to_pixel_coords(hold.x, hold.y)
             hold.x_px = x_px
@@ -235,8 +247,24 @@ def upload_wall_image(
         image_width_px=image_width_px,
         image_height_px=image_height_px,
         angle=data.angle,
+        work_area=data.work_area,
     )
     return save_wall(wall_data, session=session)
+
+
+@router.get("/walls")
+def list_walls(session: Session = Depends(get_session)):
+    walls = session.exec(select(Wall).order_by(Wall.id.desc())).all()
+    return [
+        {
+            "id": wall.id,
+            "gym_id": wall.gym_id,
+            "image_name": wall.image_name,
+            "surfaces": wall.surfaces,
+            "holds_count": len(wall.all_holds()),
+        }
+        for wall in walls
+    ]
 
 @router.get("/walls/{wall_id}")
 def get_wall(

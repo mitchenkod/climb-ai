@@ -9,10 +9,14 @@ sys.path.insert(0, str(project_root))
 from backend.models.surface import Surface
 from backend.models.route import Route
 from backend.models.movement_graph import MovementGraph as MovementGraphModel
-from backend.models.hold_in_route import HoldInRoute
+from backend.models.hold_in_route import HoldInRoute, HoldRole
 from backend.models.hold import Hold
 from backend.models.graph import MovementGraph, Movement, MovementHold, BodyPosition
 from backend.db import get_session
+from backend.services.climbing.body_position import (
+    body_position_signature,
+    select_best_body_position,
+)
 from sqlmodel import select
 import random
 from itertools import combinations
@@ -39,10 +43,20 @@ class RouteBuilder:
         if self.session:
             self.session.add(movement_graph)
 
-        start_holds = self.select_start_holds(holds)
+        start_score = select_best_body_position(
+            holds,
+            wall_angle_deg=surface.angle,
+            randomize=True,
+            excluded_signatures=self.existing_start_signatures(surface),
+        )
+        start_holds = start_score.holds if start_score else []
+        route.difficulty_score = start_score.score if start_score else None
         if start_holds:
             self.set_start_holds(route, start_holds)
-            start_position = self.create_body_position_for_holds(start_holds)
+            start_position = self.create_body_position_for_holds(
+                start_holds,
+                cost=start_score.score if start_score else 0.0,
+            )
         else:
             start_position = None
 
@@ -54,6 +68,7 @@ class RouteBuilder:
             "movement_graph": movement_graph,
             "start_position": start_position,
             "start_holds": start_holds,
+            "start_score": start_score,
         }
 
     def create_start_position(self, holds: List[Hold]) -> List[Hold]:
@@ -104,13 +119,13 @@ class RouteBuilder:
         return None
 
     def select_start_holds(self, holds: List[Hold]) -> List[Hold]:
-        """По умолчанию: берем 4 верхних зацепа (как в generate_route)."""
+        """Возвращает наиболее реалистичную стартовую позицию от 1 до 4 зацепов."""
         if not holds:
             return []
 
-        ordered = sorted(holds, key=lambda h: h.y, reverse=True)
-        selected = ordered[:4]
-        return selected
+        wall_angle_deg = holds[0].surface.angle if holds[0].surface else 0.0
+        scored = select_best_body_position(holds, wall_angle_deg=wall_angle_deg)
+        return scored.holds if scored else []
 
     def set_start_holds(self, route: Route, start_holds: List[Hold]):
         """Добавляет стартовые зацепы в маршрут."""
@@ -125,7 +140,35 @@ class RouteBuilder:
             if self.session:
                 self.session.add(hold_in_route)
 
-    def create_body_position_for_holds(self, holds: List[Hold]) -> BodyPosition:
+    def existing_start_signatures(self, surface: Surface) -> set[tuple[int, ...]]:
+        """Returns start hold combinations already used by routes on this wall."""
+        if not self.session or surface.wall_id is None:
+            return set()
+
+        rows = self.session.exec(
+            select(HoldInRoute)
+            .join(Route)
+            .where(Route.wall_id == surface.wall_id)
+            .where(HoldInRoute.role == HoldRole.START)
+        ).all()
+
+        by_route: dict[int, list[Hold]] = {}
+        for row in rows:
+            if row.route_id is None or row.hold is None:
+                continue
+            by_route.setdefault(row.route_id, []).append(row.hold)
+
+        return {
+            body_position_signature(holds)
+            for holds in by_route.values()
+            if holds
+        }
+
+    def create_body_position_for_holds(
+        self,
+        holds: List[Hold],
+        cost: float = 0.0,
+    ) -> BodyPosition:
         """Создает Movement + BodyPosition для заданных зацепов"""
         signature = ",".join(str(h.id) for h in sorted(holds, key=lambda h: h.id))
         movement = None
@@ -149,7 +192,7 @@ class RouteBuilder:
             from_movement=movement,
             to_movement=movement,
             moved_hand='L',
-            cost=0.0,
+            cost=cost,
         )
 
         if self.session:

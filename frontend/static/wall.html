@@ -6,7 +6,13 @@
 </head>
 <body>
 
-<h2>Hold Annotation Tool</h2>
+<header class="page-header">
+    <h2>Hold Annotation Tool</h2>
+    <nav>
+        <a class="button-link" href="/static/walls">Walls</a>
+        <a class="button-link" href="/static/wall/new">New wall</a>
+    </nav>
+</header>
 
 <section class="toolbar">
     <label>
@@ -55,6 +61,7 @@
             <option value="pocket">Pocket</option>
             <option value="sidepull">Sidepull</option>
             <option value="undercling">Undercling</option>
+            <option value="foot">Foot</option>
         </select>
     </label>
 
@@ -81,9 +88,40 @@
 
 <br><br>
 
+<section id="routeResult" class="route-result" hidden>
+    <h3>Route start</h3>
+    <div id="routeSummary"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Factor</th>
+                <th>Raw</th>
+                <th>Weight</th>
+                <th>Weighted</th>
+            </tr>
+        </thead>
+        <tbody id="routeBreakdown"></tbody>
+    </table>
+</section>
+
+<section class="routes-panel">
+    <div class="routes-panel-header">
+        <h3>Routes</h3>
+        <button id="routesRefresh" type="button">Refresh</button>
+    </div>
+    <div id="routesList" class="routes-list"></div>
+    <div class="pagination">
+        <button id="routesPrev" type="button">Prev</button>
+        <span id="routesPageInfo"></span>
+        <button id="routesNext" type="button">Next</button>
+    </div>
+</section>
+
+<br>
+
 <canvas id="canvas"></canvas>
 
-<script src="/static/wall.js"></script>
+<script src="/static/wall.js?v=next-move-1"></script>
 
 </body>
 </html>

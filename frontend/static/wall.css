@@ -3,6 +3,33 @@ body {
     margin: 16px;
 }
 
+.page-header {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.page-header h2 {
+    margin: 0;
+}
+
+.page-header nav {
+    display: flex;
+    gap: 8px;
+}
+
+.button-link {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    color: #111827;
+    display: inline-block;
+    padding: 6px 10px;
+    text-decoration: none;
+}
+
 .toolbar {
     align-items: center;
     display: flex;
@@ -38,4 +65,123 @@ canvas {
 
 #status {
     min-height: 20px;
+}
+
+.route-result {
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    max-width: 760px;
+    padding: 12px;
+}
+
+.route-result h3 {
+    font-size: 16px;
+    margin: 0 0 8px;
+}
+
+.route-result table {
+    border-collapse: collapse;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.route-result th,
+.route-result td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 6px 8px;
+    text-align: left;
+}
+
+.route-result th {
+    background: #f8fafc;
+    font-weight: 600;
+}
+
+.routes-panel {
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    max-width: 760px;
+    padding: 12px;
+}
+
+.routes-panel-header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.routes-panel-header h3 {
+    font-size: 16px;
+    margin: 0;
+}
+
+.routes-list {
+    display: grid;
+    gap: 6px;
+}
+
+.route-list-item {
+    align-items: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    padding: 8px;
+}
+
+.route-list-item.is-selected {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.16);
+}
+
+.route-list-title {
+    font-weight: 600;
+}
+
+.route-list-meta {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.pagination {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.walls-list {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    max-width: 980px;
+}
+
+.wall-list-item {
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    color: #111827;
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+    text-decoration: none;
+}
+
+.wall-list-item img {
+    aspect-ratio: 4 / 3;
+    background: #f3f4f6;
+    object-fit: cover;
+    width: 100%;
+}
+
+.wall-list-item span {
+    font-weight: 600;
+}
+
+.wall-list-item small {
+    color: #6b7280;
 }
